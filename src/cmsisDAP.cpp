@@ -793,17 +793,15 @@ int CmsisDAP::writeJtagSequence(uint8_t tms, const uint8_t *tx, uint8_t *rx,
 			xfer_bit_len = xfer_rest;
 		}
 
-		/* buffer is 65bits with
-		 * [0]   : hid
-		 * [1]   : cmsisdap operation
-		 * [2]   : number of sequence
-		 * [64:3]: sequence with
+		/* a packet is _pkt_sz bytes with
+		 * [0]   : cmsisdap operation
+		 * [1]   : number of sequence
+		 * [2:]  : sequences with
 		 *    [n]        : sequence infos
 		 *    [n+m+1:n+1]: data
-		 * So only 62 bits are available to send sequences
-		 * and 64bits (full sequence) mean 8bits
-		 * => one sequence == 9Bytes and 9*7 == 63
-		 * then we have 6 * 8 fully filled sequence + one up to 56bits
+		 * one fully filled sequence (64 bits) uses 9 Bytes. The last
+		 * sequence of a packet is truncated to the remaining space
+		 * (with 64 Bytes: 6 * 64 bits + one up to 56bits)
 		 */
 		if (xfer_byte_len + 1 + pos > _pkt_sz - 1) {
 			xfer_byte_len = _pkt_sz - pos - 2;  // number of free bytes
@@ -823,12 +821,15 @@ int CmsisDAP::writeJtagSequence(uint8_t tms, const uint8_t *tx, uint8_t *rx,
 		byte_to_read += xfer_byte_len;  // update read lenght
 
 		/* when it's the last sequence or
-		 * buffer is fully filled
+		 * buffer is fully filled (no room left for another sequence
+		 * info + one data Byte, or max number of sequences reached)
 		 * => flush
 		 * if it's the last sequence and end is true, don't do anything
-		 * here -> see bellow
+		 * here -> see bellow (the last sequence needs 2 Bytes too and
+		 * one extra sequence, so it always fits)
 		 */
-		if ((!end && xfer_rest == 0) || seq_num == 7) {
+		if ((!end && xfer_rest == 0) || seq_num == 254 ||
+				pos + 2 > _pkt_sz - 1) {
 			_buffer[0] = seq_num;  // set number of sequences
 			ret = xfer(DAP_JTAG_SEQUENCE, pos,
 					(rx) ? rx_ptr: NULL, byte_to_read);
