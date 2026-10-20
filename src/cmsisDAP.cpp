@@ -948,7 +948,7 @@ int CmsisDAP::xfer(uint8_t instruction, int tx_len,
  */
 int CmsisDAP::xfer(int tx_len, uint8_t *rx_buff, int rx_len)
 {
-	int ret = -1, bulk_len = 0;
+	int ret = -1;
 	_ll_buffer[0] = 0;
 
 	switch(_backend){
@@ -970,30 +970,30 @@ int CmsisDAP::xfer(int tx_len, uint8_t *rx_buff, int rx_len)
 			break;
 #endif
 #ifdef ENABLE_CMSISDAP_V2
-		case BACKEND_USBBULK:
-			memset(&_ll_buffer[1 + tx_len], 0, 64 - tx_len);
-			ret = libusb_bulk_transfer(_usb_dev, _ep_out, &_ll_buffer[1], 64, &bulk_len, 1000);
-			if (ret != 0) {
+		case BACKEND_USBBULK: {
+			/* unlike HID, bulk packets are not padded: only send the
+			 * command (a command is never larger than _pkt_sz)
+			 */
+			int bulk_len = 0;
+			ret = libusb_bulk_transfer(_usb_dev, _ep_out, &_ll_buffer[1],
+					tx_len, &bulk_len, 1000);
+			if (ret != 0 || bulk_len != tx_len) {
 				printError("Error: Bulk write failed\n");
-				return ret;
+				return (ret != 0) ? ret : -1;
 			}
-			memset(&_ll_buffer[0], 0, 1024);
-			ret = libusb_bulk_transfer(_usb_dev, _ep_in, &_ll_buffer[0], _pkt_sz, &bulk_len, 1000);
-			// sleep for 1ms to ensure that polling behavior aligns with HID backend
-			usleep(1000);
-			if (ret != 0 && ret != LIBUSB_ERROR_TIMEOUT) {
+			ret = libusb_bulk_transfer(_usb_dev, _ep_in, &_ll_buffer[0],
+					_pkt_sz, &bulk_len, 1000);
+			if (ret != 0) {
 				printError("Error: Bulk read failed\n");
 				return ret;
 			}
-			if(bulk_len == 0){
-				printError("Error: Bulk timeout\n");
+			if (bulk_len == 0) {
+				printError("Error: Bulk empty answer\n");
 				return -1;
 			}
-			// if (rx_buff && bulk_len < rx_len + 2) {
-                // printf("bulk short read: expected %d, got %d\n", rx_len + 2, bulk_len);
-            // }
 			ret = bulk_len;
 			break;
+		}
 #endif
 		default:
 			printError("Error: unknown USB backend\n");
