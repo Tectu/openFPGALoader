@@ -499,6 +499,30 @@ bool CmsisDAP::initWithBulk(const cable_t &cable, int8_t verbose, bool err_as_in
 	_ep_out = dev.ep_out;
 	_ep_in = dev.ep_in;
 
+	/* query the DAP packet size (may differ from the endpoint size)
+	 * and grow buffer if needed
+	 */
+	uint8_t buf[65];
+	memset(buf, 0, 65);
+	if (read_info(INFO_ID_MAX_PKT_SZ, buf, 64) == 2) {
+		const uint16_t sz = (static_cast<uint16_t>(buf[3]) << 8) | buf[2];
+		if (sz >= 64) {
+			_pkt_sz = sz;
+			if (sz + 1 > 1024) {
+				unsigned char *tmp = (unsigned char *)realloc(_ll_buffer, _pkt_sz + 1);
+				if (!tmp) {
+					libusb_release_interface(_usb_dev, dev.interface_num);
+					libusb_close(_usb_dev);
+					libusb_exit(_ctx);
+					disp_error_info("cmsisDAP: internal buffer reallocation failed", err_as_info);
+					return false;
+				}
+				_ll_buffer = tmp;
+				_buffer = _ll_buffer + 2;
+			}
+		}
+	}
+
 	return true;
 }
 
