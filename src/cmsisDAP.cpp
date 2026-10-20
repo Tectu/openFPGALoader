@@ -896,58 +896,12 @@ int CmsisDAP::flush()
 int CmsisDAP::xfer(uint8_t instruction, int tx_len,
 		uint8_t *rx_buff, int rx_len)
 {
-	int ret = -1, bulk_len = 0;
-	_ll_buffer[0] = 0;
 	_ll_buffer[1] = instruction;
 
-	switch(_backend){
-#ifdef ENABLE_CMSISDAP_V1
-		case BACKEND_HID:
-			ret = hid_write(_hid_dev, _ll_buffer, _pkt_sz + 1);
-			if (ret == -1) {
-				printError("Error: HID write failed\n");
-				return ret;
-			}
-			ret = hid_read_timeout(_hid_dev, _ll_buffer, _pkt_sz + 1, 1000);
-			if (ret <= 0) {
-				if (ret == 0)
-					printError("Error: HID read timeout\n");
-				else if (ret == -1)
-					printError("Error: HID comm failed\n");
-				return ret;
-			}
-			break;
-#endif
-#ifdef ENABLE_CMSISDAP_V2
-		case BACKEND_USBBULK:
-			memset(&_ll_buffer[1 + tx_len + 1], 0, 64 - (tx_len + 1));
-			ret = libusb_bulk_transfer(_usb_dev, _ep_out, &_ll_buffer[1], 64, &bulk_len, 1000);
-			if (ret != 0) {
-				printError("Error: Bulk write failed\n");
-				return ret;
-			}
-			memset(&_ll_buffer[0], 0, 1024);
-			ret = libusb_bulk_transfer(_usb_dev, _ep_in, &_ll_buffer[0], _pkt_sz, &bulk_len, 1000);
-			// sleep for 1ms to ensure that polling behavior aligns with HID backend
-			usleep(1000);
-			if (ret != 0 && ret != LIBUSB_ERROR_TIMEOUT) {
-				printError("Error: Bulk read failed\n");
-				return ret;
-			}
-			if(bulk_len == 0){
-				printError("Error: Bulk timeout\n");
-				return -1;
-			}
-			// if (rx_buff && bulk_len < rx_len + 2) {
-                // printf("bulk short read: expected %d, got %d\n", rx_len + 2, bulk_len);
-            // }
-			ret = bulk_len;
-			break;
-#endif
-		default:
-			printError("Error: unknown USB backend\n");
-			break;
-	}
+	/* +1: instruction */
+	int ret = xfer(tx_len + 1, NULL, 0);
+	if (ret <= 0)
+		return ret;
 
 	if (_ll_buffer[0] != instruction) {
 		printError("Error: command error\n");
@@ -965,7 +919,8 @@ int CmsisDAP::xfer(uint8_t instruction, int tx_len,
 
 /* same as previous method but
  * 1/ instruction is already in tx_buff
- * 2/ no check is done to device answer
+ * 2/ tx_len includes the instruction
+ * 3/ no check is done to device answer
  */
 int CmsisDAP::xfer(int tx_len, uint8_t *rx_buff, int rx_len)
 {
@@ -992,7 +947,7 @@ int CmsisDAP::xfer(int tx_len, uint8_t *rx_buff, int rx_len)
 #endif
 #ifdef ENABLE_CMSISDAP_V2
 		case BACKEND_USBBULK:
-			memset(&_ll_buffer[1 + tx_len + 1], 0, 64 - (tx_len + 1));
+			memset(&_ll_buffer[1 + tx_len], 0, 64 - tx_len);
 			ret = libusb_bulk_transfer(_usb_dev, _ep_out, &_ll_buffer[1], 64, &bulk_len, 1000);
 			if (ret != 0) {
 				printError("Error: Bulk write failed\n");
