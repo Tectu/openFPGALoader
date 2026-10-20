@@ -280,6 +280,8 @@ CmsisDAP::~CmsisDAP()
 #endif
 #ifdef ENABLE_CMSISDAP_V2
 		case BACKEND_USBBULK:
+			if (_is_connect)
+				dapDisconnect();
 			libusb_close(_usb_dev);
 			libusb_exit(_ctx);
 			break;
