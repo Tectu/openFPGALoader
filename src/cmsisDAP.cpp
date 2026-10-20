@@ -131,7 +131,10 @@ CmsisDAP::CmsisDAP(const cable_t &cable, int index, uint32_t clkHZ, int8_t verbo
 		_usb_dev(NULL), _ctx(NULL),
 #endif
 		_pkt_sz(0),
-		_ep_in(0), _ep_out(0), _num_tms(0), _is_connect(false), _backend(BACKEND_NONE)
+#ifdef ENABLE_CMSISDAP_V2
+		_ep_in(0), _ep_out(0),
+#endif
+		_num_tms(0), _is_connect(false), _backend(BACKEND_NONE)
 {
 	_ll_buffer = (unsigned char *)malloc(sizeof(unsigned char) * 1024);
 	if (!_ll_buffer)
